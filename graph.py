@@ -4,7 +4,7 @@ YouTube Summarizer & Q&A — LangGraph Multi-Agent Workflow
 Three specialized agents orchestrated by LangGraph:
 
   1. Transcriber  — fetches and chunks the YouTube transcript
-  2. Summarizer   — produces a structured JSON summary via Groq  [in progress]
+  2. Summarizer   — produces a structured JSON summary via Groq
   3. Q&A          — answers user questions grounded in context   [in progress]
 """
 from __future__ import annotations
@@ -148,5 +148,68 @@ def transcriber_node(state: VideoState) -> dict:
         "video_id": vid,
         "transcript": transcript,
         "chunks": _chunk(transcript),
+        "error": None,
+    }
+
+
+def summarizer_node(state: VideoState) -> dict:
+    """
+    Agent 2 — Summarizer
+    Calls Groq to produce a structured JSON summary from the transcript.
+    """
+    try:
+        client = _groq()
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    # Trim to stay comfortably within the model's token budget
+    text = state["transcript"]
+    if len(text) > 15_000:
+        text = text[:15_000] + "\n... [transcript truncated for length]"
+
+    prompt = f"""You are analyzing a YouTube video transcript. Produce a structured summary.
+
+TRANSCRIPT:
+{text}
+
+Respond with ONLY valid JSON — no markdown fences, no commentary:
+{{
+  "summary": "<comprehensive 2-3 paragraph overview of the video>",
+  "key_points": [
+    "<specific insight — include timestamp if available>",
+    "<specific insight — include timestamp if available>",
+    "<specific insight — include timestamp if available>",
+    "<specific insight — include timestamp if available>",
+    "<specific insight — include timestamp if available>"
+  ],
+  "topics": ["<topic>", "<topic>", "<topic>"],
+  "video_type": "<tutorial|lecture|interview|review|vlog|other>",
+  "difficulty": "<beginner|intermediate|advanced|general>"
+}}
+
+Provide 5-7 key_points and 3-5 topics. Make key_points specific and actionable."""
+
+    try:
+        resp = client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+            max_tokens=2_048,
+        )
+        raw = _strip_fences(resp.choices[0].message.content)
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        data = {
+            "summary": resp.choices[0].message.content,
+            "key_points": [],
+            "topics": [],
+        }
+    except Exception as exc:
+        return {"error": f"Summarization failed: {exc}"}
+
+    return {
+        "summary": data.get("summary", ""),
+        "key_points": data.get("key_points", []),
+        "topics": data.get("topics", []),
         "error": None,
     }

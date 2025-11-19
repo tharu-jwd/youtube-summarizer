@@ -5,7 +5,7 @@ Three specialized agents orchestrated by LangGraph:
 
   1. Transcriber  — fetches and chunks the YouTube transcript
   2. Summarizer   — produces a structured JSON summary via Groq
-  3. Q&A          — answers user questions grounded in context   [in progress]
+  3. Q&A          — answers user questions grounded in the transcript + summary
 """
 from __future__ import annotations
 
@@ -213,3 +213,94 @@ Provide 5-7 key_points and 3-5 topics. Make key_points specific and actionable."
         "topics": data.get("topics", []),
         "error": None,
     }
+
+
+def qa_node(state: VideoState) -> dict:
+    """
+    Agent 3 — Q&A
+    Answers user questions grounded in the transcript and summary.
+    """
+    try:
+        client = _groq()
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    transcript_ctx = state.get("transcript", "")[:10_000]
+    kp_block = "\n".join(f"• {p}" for p in state.get("key_points", []))
+
+    system_prompt = f"""You are an expert assistant answering questions about a YouTube video.
+You have access to the video's full transcript and a pre-generated summary.
+
+SUMMARY:
+{state.get("summary", "Not available")}
+
+KEY POINTS:
+{kp_block}
+
+FULL TRANSCRIPT (with timestamps):
+{transcript_ctx}
+
+Instructions:
+- Answer accurately using only information from the video content.
+- Reference specific timestamps (e.g. "At 02:15, the speaker explains...") when helpful.
+- If the answer isn't in the transcript, say so clearly rather than guessing.
+- Be concise but thorough."""
+
+    # Build messages: system + last 10 history messages + new question
+    messages: list[dict] = [{"role": "system", "content": system_prompt}]
+    messages.extend(state.get("conversation_history", [])[-10:])
+    messages.append({"role": "user", "content": state["question"]})
+
+    try:
+        resp = client.chat.completions.create(
+            model=MODEL,
+            messages=messages,
+            temperature=0.4,
+            max_tokens=1_024,
+        )
+        return {"answer": resp.choices[0].message.content, "error": None}
+    except Exception as exc:
+        return {"error": f"Q&A failed: {exc}"}
+
+
+# ─────────────────────────────── Routing ────────────────────────────────── #
+
+def _route_entry(state: VideoState) -> str:
+    """Entry point: route to transcriber for summarization, qa for questions."""
+    return "transcriber" if state.get("mode", "summarize") == "summarize" else "qa"
+
+
+def _route_post_transcription(state: VideoState) -> str:
+    """After transcription: proceed to summarizer or surface the error."""
+    return "end" if state.get("error") else "summarizer"
+
+
+# ─────────────────────────────── Graph Assembly ─────────────────────────── #
+
+def _build_graph():
+    wf = StateGraph(VideoState)
+
+    wf.add_node("transcriber", transcriber_node)
+    wf.add_node("summarizer",  summarizer_node)
+    wf.add_node("qa",          qa_node)
+
+    # Entry routing: summarize path vs. Q&A path
+    wf.add_conditional_edges(START, _route_entry, {
+        "transcriber": "transcriber",
+        "qa":          "qa",
+    })
+
+    # After transcription: surface errors or continue to summarizer
+    wf.add_conditional_edges("transcriber", _route_post_transcription, {
+        "summarizer": "summarizer",
+        "end":        END,
+    })
+
+    wf.add_edge("summarizer", END)
+    wf.add_edge("qa",         END)
+
+    return wf.compile()
+
+
+# Module-level compiled graph — imported by app.py
+graph = _build_graph()

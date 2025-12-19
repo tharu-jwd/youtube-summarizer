@@ -127,7 +127,7 @@ with st.sidebar:
         "1. Paste a YouTube URL\n"
         "2. Click **▶ Process**\n"
         "3. Read the AI summary\n"
-        "4. Ask questions about the video"
+        "4. Ask questions in the **Chat Q&A** tab"
     )
 
     st.markdown("---")
@@ -178,7 +178,7 @@ if process_btn and url_input:
     if not _load_api_key():
         st.error("Please enter your Groq API key in the sidebar first.")
     elif url_input == st.session_state.processed_url:
-        st.info("This video is already loaded. Scroll down to read the summary!")
+        st.info("This video is already loaded. Ask questions below!")
     else:
         st.session_state.conversation_history = []
         st.session_state.error = None
@@ -198,18 +198,56 @@ if process_btn and url_input:
             error=None,
         )
 
-        with st.spinner("Fetching transcript and generating summary…"):
-            result = graph.invoke(initial_state)
+        accumulated: dict = {}
+        error_occurred = False
 
-        if result.get("error"):
-            st.session_state.error = result["error"]
-        else:
-            st.session_state.transcript    = result["transcript"]
-            st.session_state.chunks        = result["chunks"]
-            st.session_state.summary       = result["summary"]
-            st.session_state.key_points    = result["key_points"]
-            st.session_state.topics        = result.get("topics", [])
-            st.session_state.video_id      = result["video_id"]
+        with st.status("🎬 Processing video...", expanded=True) as proc_status:
+            proc_status.write("🔍 Fetching transcript from YouTube...")
+
+            for chunk in graph.stream(initial_state, stream_mode="updates"):
+                for node_name, updates in chunk.items():
+                    accumulated.update(updates)
+
+                    if updates.get("error"):
+                        proc_status.update(
+                            label=f"❌ Error — {updates['error'][:60]}",
+                            state="error",
+                            expanded=True,
+                        )
+                        error_occurred = True
+                        break
+
+                    if node_name == "transcriber":
+                        n = len(updates.get("chunks", []))
+                        proc_status.write(
+                            f"✅ Transcript ready — {n} segments · "
+                            f"{len(updates.get('transcript', '')):,} characters"
+                        )
+                        proc_status.write("📝 Generating AI summary…")
+
+                    elif node_name == "summarizer":
+                        proc_status.write(
+                            f"✅ Summary generated — "
+                            f"{len(updates.get('key_points', []))} key points"
+                        )
+
+                if error_occurred:
+                    break
+
+            if not error_occurred:
+                proc_status.update(
+                    label="✅ Video processed!", state="complete", expanded=False
+                )
+
+        if accumulated.get("error"):
+            st.session_state.error = accumulated["error"]
+        elif not error_occurred:
+            st.session_state.transcript    = accumulated.get("transcript", "")
+            st.session_state.chunks        = accumulated.get("chunks", [])
+            st.session_state.summary       = accumulated.get("summary", "")
+            st.session_state.key_points    = accumulated.get("key_points", [])
+            st.session_state.topics        = accumulated.get("topics", [])
+            st.session_state.video_id      = accumulated.get("video_id", "")
             st.session_state.processed_url = url_input
 
         st.rerun()
@@ -247,18 +285,63 @@ if st.session_state.summary:
             )
 
     with right_col:
-        st.markdown(
-            f'<div class="card">{st.session_state.summary}</div>',
-            unsafe_allow_html=True,
-        )
+        tab_summary, tab_qa = st.tabs(["📋 Summary", "💬 Chat Q&A"])
 
-        if st.session_state.key_points:
-            st.markdown("**Key Points**")
-            for i, pt in enumerate(st.session_state.key_points, 1):
-                st.markdown(
-                    f'<div class="kp"><b>{i}.</b> {pt}</div>',
-                    unsafe_allow_html=True,
-                )
+        # ── Summary tab ──────────────────────────────────────────────────
+        with tab_summary:
+            st.markdown(
+                f'<div class="card">{st.session_state.summary}</div>',
+                unsafe_allow_html=True,
+            )
+
+            if st.session_state.key_points:
+                st.markdown("**Key Points**")
+                for i, pt in enumerate(st.session_state.key_points, 1):
+                    st.markdown(
+                        f'<div class="kp"><b>{i}.</b> {pt}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+        # ── Q&A tab ──────────────────────────────────────────────────────
+        with tab_qa:
+            st.caption("Ask anything about this video — I'll answer using the transcript.")
+
+            for msg in st.session_state.conversation_history:
+                with st.chat_message(msg["role"]):
+                    st.write(msg["content"])
+
+            if question := st.chat_input("Ask about the video…"):
+                with st.chat_message("user"):
+                    st.write(question)
+
+                with st.chat_message("assistant"):
+                    with st.spinner("Thinking…"):
+                        qa_state = VideoState(
+                            youtube_url=st.session_state.processed_url or "",
+                            mode="qa",
+                            question=question,
+                            video_id=st.session_state.video_id or "",
+                            transcript=st.session_state.transcript or "",
+                            chunks=st.session_state.chunks or [],
+                            summary=st.session_state.summary or "",
+                            key_points=st.session_state.key_points or [],
+                            topics=st.session_state.topics or [],
+                            answer=None,
+                            conversation_history=st.session_state.conversation_history[-10:],
+                            error=None,
+                        )
+                        result = graph.invoke(qa_state)
+
+                    if result.get("error"):
+                        st.error(result["error"])
+                    else:
+                        answer = result["answer"]
+                        st.write(answer)
+                        st.session_state.conversation_history.extend([
+                            {"role": "user",      "content": question},
+                            {"role": "assistant", "content": answer},
+                        ])
+                        st.rerun()
 
 elif not st.session_state.error:
     st.markdown(

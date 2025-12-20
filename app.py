@@ -23,42 +23,27 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-.hero {
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-    border-radius: 14px;
-    padding: 1.8rem 2rem;
-    color: #fff;
-    text-align: center;
-    margin-bottom: 1.5rem;
-}
-.hero h1 { margin: 0; font-size: 2rem; font-weight: 700; }
-.hero p  { margin: .4rem 0 0; opacity: .85; font-size: .95rem; }
-
-.card {
-    background: #fff;
-    border-radius: 12px;
-    padding: 1.4rem;
-    box-shadow: 0 1px 6px rgba(0,0,0,.07);
-    margin-bottom: .8rem;
-}
-
-.kp {
-    background: #eef2ff;
-    border-left: 4px solid #6366f1;
-    padding: .45rem .9rem;
-    border-radius: 0 8px 8px 0;
-    margin: .3rem 0;
-    font-size: .93rem;
-}
-
-.tag {
-    display: inline-block;
-    background: #6366f1;
-    color: #fff;
-    font-size: .78rem;
-    padding: .2rem .65rem;
-    border-radius: 20px;
-    margin: .2rem .15rem;
+[data-testid="stAppViewContainer"] { background: #f5f7fa; }
+.hero { background: linear-gradient(135deg,#6366f1,#8b5cf6);
+        border-radius:14px; padding:2rem; color:#fff; text-align:center; margin-bottom:1.5rem; }
+.hero h1 { margin:0; font-size:2rem; }
+.hero p  { margin:.4rem 0 0; opacity:.85; font-size:.95rem; }
+.card { background:#fff; border-radius:12px; padding:1.5rem;
+        box-shadow:0 1px 4px rgba(0,0,0,.08); margin-bottom:1rem; }
+.kp { background:#eef2ff; border-left:4px solid #6366f1;
+           padding:.5rem .9rem; border-radius:0 8px 8px 0; margin:.35rem 0; }
+.tag { display:inline-block; background:#6366f1; color:#fff; font-size:.78rem;
+       padding:.2rem .65rem; border-radius:20px; margin:.2rem .15rem; }
+.tx-box {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 1rem;
+    font-family: monospace;
+    font-size: .82rem;
+    max-height: 500px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    line-height: 1.6;
 }
 </style>
 """,
@@ -285,7 +270,9 @@ if st.session_state.summary:
             )
 
     with right_col:
-        tab_summary, tab_qa = st.tabs(["📋 Summary", "💬 Chat Q&A"])
+        tab_summary, tab_qa, tab_transcript = st.tabs(
+            ["📋 Summary", "💬 Chat Q&A", "📜 Full Transcript"]
+        )
 
         # ── Summary tab ──────────────────────────────────────────────────
         with tab_summary:
@@ -342,6 +329,22 @@ if st.session_state.summary:
                             {"role": "assistant", "content": answer},
                         ])
                         st.rerun()
+
+        # ── Transcript tab ───────────────────────────────────────────────
+        with tab_transcript:
+            dl_col, _ = st.columns([1, 3])
+            with dl_col:
+                st.download_button(
+                    "⬇️ Download .txt",
+                    data=st.session_state.transcript,
+                    file_name=f"transcript_{vid_id}.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                )
+            st.markdown(
+                f'<div class="tx-box">{st.session_state.transcript}</div>',
+                unsafe_allow_html=True,
+            )
 
 elif not st.session_state.error:
     st.markdown(

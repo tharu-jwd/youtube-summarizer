@@ -187,7 +187,8 @@ Respond with ONLY valid JSON — no markdown fences, no commentary:
   "difficulty": "<beginner|intermediate|advanced|general>"
 }}
 
-Provide 5-7 key_points and 3-5 topics. Make key_points specific and actionable."""
+Provide exactly 6 key_points and 3-5 topics.
+Each key point must reference a specific timestamp from the transcript."""
 
     try:
         resp = client.chat.completions.create(

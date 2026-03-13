@@ -90,8 +90,6 @@ def _load_api_key() -> str:
 # ─────────────────────────────── Sidebar ────────────────────────────────── #
 
 with st.sidebar:
-    st.header("Settings")
-
     api_key = _load_api_key()
     if api_key:
         os.environ["GROQ_API_KEY"] = api_key

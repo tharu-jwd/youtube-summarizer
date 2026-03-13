@@ -118,11 +118,11 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### Stack")
     st.markdown(
-        "- **LangGraph** — agent orchestration\n"
-        "- **Groq** — ultra-fast LLM inference\n"
-        "- **Llama 3.1 8B** — open-source LLM\n"
-        "- **youtube-transcript-api** — captions\n"
-        "- **Streamlit** — UI"
+        "- **LangGraph** - agent orchestration\n"
+        "- **Groq** - ultra-fast LLM inference\n"
+        "- **Llama 3.1 8B** - open-source LLM\n"
+        "- **youtube-transcript-api** - captions\n"
+        "- **Streamlit** - UI"
     )
 
     if st.session_state.transcript:

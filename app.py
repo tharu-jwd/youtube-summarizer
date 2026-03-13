@@ -33,6 +33,9 @@ st.markdown(
            padding:.5rem .9rem; border-radius:0 8px 8px 0; margin:.35rem 0; }
 .tag { display:inline-block; background:#6366f1; color:#fff; font-size:.78rem;
        padding:.2rem .65rem; border-radius:20px; margin:.2rem .15rem; }
+.stButton > button { background:#111 !important; color:#fff !important;
+    border:none !important; border-radius:8px !important; }
+.stButton > button:hover { background:#333 !important; }
 .tx-box {
     background: #f8f9fa;
     border-radius: 8px;
@@ -92,7 +95,7 @@ with st.sidebar:
     api_key = _load_api_key()
     if api_key:
         os.environ["GROQ_API_KEY"] = api_key
-        st.success("Groq API key ready")
+        st.markdown("Groq API key ready")
     else:
         user_key = st.text_input(
             "Groq API Key",
@@ -154,7 +157,7 @@ with col_url:
         label_visibility="collapsed",
     )
 with col_btn:
-    process_btn = st.button("Process", type="primary", use_container_width=True)
+    process_btn = st.button("Process", use_container_width=True)
 
 # ─────────────────────────────── Processing ─────────────────────────────── #
 

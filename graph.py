@@ -12,15 +12,12 @@ from __future__ import annotations
 import json
 import os
 import re
+import urllib.request
 from typing import List, Optional, TypedDict
 
+import yt_dlp
 from groq import Groq
 from langgraph.graph import END, START, StateGraph
-from youtube_transcript_api import (
-    NoTranscriptFound,
-    TranscriptsDisabled,
-    YouTubeTranscriptApi,
-)
 
 MODEL = "llama-3.1-8b-instant"
 
@@ -79,6 +76,46 @@ def _fmt_ts(seconds: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
 
 
+def _fetch_url(url: str) -> str:
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req) as r:
+        return r.read().decode("utf-8")
+
+
+def _parse_json3(content: str) -> List[dict]:
+    """Parse YouTube's json3 subtitle format into [{start, text}] entries."""
+    data = json.loads(content)
+    entries = []
+    for event in data.get("events", []):
+        segs = event.get("segs", [])
+        text = "".join(s.get("utf8", "") for s in segs).strip()
+        if text and text != "\n":
+            entries.append({"start": event.get("tStartMs", 0) / 1000, "text": text})
+    return entries
+
+
+def _parse_vtt(content: str) -> List[dict]:
+    """Parse WebVTT subtitle content into [{start, text}] entries."""
+    entries = []
+    ts_re = re.compile(
+        r"(\d+:)?(\d+):(\d+\.\d+)\s+-->\s+(\d+:)?(\d+):(\d+\.\d+)"
+    )
+    blocks = re.split(r"\n{2,}", content)
+    for block in blocks:
+        lines = block.strip().splitlines()
+        for i, line in enumerate(lines):
+            m = ts_re.match(line)
+            if m:
+                h = int(m.group(1).rstrip(":")) if m.group(1) else 0
+                start = h * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+                raw = " ".join(lines[i + 1 :])
+                text = re.sub(r"<[^>]+>", "", raw).strip()
+                if text:
+                    entries.append({"start": start, "text": text})
+                break
+    return entries
+
+
 def _chunk(text: str, size: int = 3_000) -> List[str]:
     """Split text into word-bounded chunks of approximately `size` characters."""
     words = text.split()
@@ -111,36 +148,56 @@ def _strip_fences(text: str) -> str:
 def transcriber_node(state: VideoState) -> dict:
     """
     Agent 1 — Transcriber
-    Fetches the YouTube transcript, formats it with timestamps, and chunks it.
+    Fetches the YouTube transcript via yt-dlp, formats it with timestamps, and chunks it.
     """
     try:
         vid = _extract_video_id(state["youtube_url"])
     except ValueError as exc:
         return {"error": str(exc)}
 
-    api = YouTubeTranscriptApi()
+    url = f"https://www.youtube.com/watch?v={vid}"
+    ydl_opts = {"skip_download": True, "quiet": True, "no_warnings": True}
+
     try:
-        raw_entries = list(api.fetch(vid))
-    except TranscriptsDisabled:
-        return {
-            "error": (
-                "Captions are disabled for this video. "
-                "Please try a different video that has auto-generated or manual captions."
-            )
-        }
-    except NoTranscriptFound:
-        try:
-            tl = api.list(vid)
-            t = tl.find_generated_transcript(["en", "en-US", "en-GB"])
-            raw_entries = list(t.fetch())
-        except Exception as exc:
-            return {"error": f"No English transcript found for this video: {exc}"}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
     except Exception as exc:
         return {"error": f"Transcript fetch failed: {exc}"}
 
+    manual = info.get("subtitles", {})
+    auto   = info.get("automatic_captions", {})
+
+    raw_entries: List[dict] | None = None
+    for lang in ["en", "en-US", "en-GB", "en-orig"]:
+        candidates = manual.get(lang) or auto.get(lang)
+        if not candidates:
+            continue
+        # Prefer json3 (cleanest), then vtt
+        for fmt in ("json3", "vtt"):
+            match = next((e for e in candidates if e.get("ext") == fmt), None)
+            if match:
+                try:
+                    content = _fetch_url(match["url"])
+                    raw_entries = _parse_json3(content) if fmt == "json3" else _parse_vtt(content)
+                except Exception:
+                    continue
+                if raw_entries:
+                    break
+        if raw_entries:
+            break
+
+    if not raw_entries:
+        return {
+            "error": (
+                "No English captions found for this video. "
+                "Please try a video that has auto-generated or manual English captions."
+            )
+        }
+
     lines = [
-        f"[{_fmt_ts(e.start)}] {e.text.strip().replace(chr(10), ' ')}"
+        f"[{_fmt_ts(e['start'])}] {e['text'].strip().replace(chr(10), ' ')}"
         for e in raw_entries
+        if e["text"].strip()
     ]
     transcript = "\n".join(lines)
 

@@ -23,10 +23,10 @@ st.markdown(
     """
 <style>
 [data-testid="stAppViewContainer"] { background: #f5f7fa; }
-.hero { background: linear-gradient(135deg,#6366f1,#8b5cf6);
-        border-radius:14px; padding:2rem; color:#fff; text-align:center; margin-bottom:1.5rem; }
+.hero { background: #fff; border:1.5px solid #111;
+        border-radius:14px; padding:2rem; color:#111; text-align:center; margin-bottom:1.5rem; }
 .hero h1 { margin:0; font-size:2rem; }
-.hero p  { margin:.4rem 0 0; opacity:.85; font-size:.95rem; }
+.hero p  { margin:.4rem 0 0; opacity:.6; font-size:.95rem; }
 .card { background:#fff; border-radius:12px; padding:1.5rem;
         box-shadow:0 1px 4px rgba(0,0,0,.08); margin-bottom:1rem; }
 .kp { background:#eef2ff; border-left:4px solid #6366f1;

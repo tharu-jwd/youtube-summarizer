@@ -13,7 +13,6 @@ from graph import VideoState, graph
 
 st.set_page_config(
     page_title="YouTube Summarizer & Q&A",
-    page_icon="🎬",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -88,12 +87,12 @@ def _load_api_key() -> str:
 # ─────────────────────────────── Sidebar ────────────────────────────────── #
 
 with st.sidebar:
-    st.header("⚙️ Settings")
+    st.header("Settings")
 
     api_key = _load_api_key()
     if api_key:
         os.environ["GROQ_API_KEY"] = api_key
-        st.success("✅ Groq API key ready")
+        st.success("Groq API key ready")
     else:
         user_key = st.text_input(
             "Groq API Key",
@@ -107,16 +106,16 @@ with st.sidebar:
             st.success("Key saved for this session!")
 
     st.markdown("---")
-    st.markdown("### 📖 How to use")
+    st.markdown("### How to use")
     st.markdown(
         "1. Paste a YouTube URL\n"
-        "2. Click **▶ Process**\n"
+        "2. Click **Process**\n"
         "3. Read the AI summary\n"
         "4. Ask questions in the **Chat Q&A** tab"
     )
 
     st.markdown("---")
-    st.markdown("### 🛠 Stack")
+    st.markdown("### Stack")
     st.markdown(
         "- **LangGraph** — agent orchestration\n"
         "- **Groq** — ultra-fast LLM inference\n"
@@ -127,7 +126,7 @@ with st.sidebar:
 
     if st.session_state.transcript:
         st.markdown("---")
-        if st.button("🗑 Clear & Reset", use_container_width=True):
+        if st.button("Clear & Reset", use_container_width=True):
             for _k in _DEFAULTS:
                 st.session_state[_k] = _DEFAULTS[_k]
             st.rerun()
@@ -138,7 +137,7 @@ with st.sidebar:
 st.markdown(
     """
 <div class="hero">
-  <h1>🎬 YouTube Summarizer &amp; Q&amp;A</h1>
+  <h1>YouTube Summarizer &amp; Q&amp;A</h1>
   <p>Multi-agent AI · LangGraph · Groq · Llama 3.1 8B Instant</p>
 </div>
 """,
@@ -155,7 +154,7 @@ with col_url:
         label_visibility="collapsed",
     )
 with col_btn:
-    process_btn = st.button("▶ Process", type="primary", use_container_width=True)
+    process_btn = st.button("Process", type="primary", use_container_width=True)
 
 # ─────────────────────────────── Processing ─────────────────────────────── #
 
@@ -186,8 +185,8 @@ if process_btn and url_input:
         accumulated: dict = {}
         error_occurred = False
 
-        with st.status("🎬 Processing video...", expanded=True) as proc_status:
-            proc_status.write("🔍 Fetching transcript from YouTube...")
+        with st.status("Processing video...", expanded=True) as proc_status:
+            proc_status.write("Fetching transcript from YouTube...")
 
             for chunk in graph.stream(initial_state, stream_mode="updates"):
                 for node_name, updates in chunk.items():
@@ -195,7 +194,7 @@ if process_btn and url_input:
 
                     if updates.get("error"):
                         proc_status.update(
-                            label=f"❌ Error — {updates['error'][:60]}",
+                            label=f"Error — {updates['error'][:60]}",
                             state="error",
                             expanded=True,
                         )
@@ -205,14 +204,14 @@ if process_btn and url_input:
                     if node_name == "transcriber":
                         n = len(updates.get("chunks", []))
                         proc_status.write(
-                            f"✅ Transcript ready — {n} segments · "
+                            f"Transcript ready — {n} segments · "
                             f"{len(updates.get('transcript', '')):,} characters"
                         )
-                        proc_status.write("📝 Generating AI summary…")
+                        proc_status.write("Generating AI summary…")
 
                     elif node_name == "summarizer":
                         proc_status.write(
-                            f"✅ Summary generated — "
+                            f"Summary generated — "
                             f"{len(updates.get('key_points', []))} key points"
                         )
 
@@ -221,7 +220,7 @@ if process_btn and url_input:
 
             if not error_occurred:
                 proc_status.update(
-                    label="✅ Video processed!", state="complete", expanded=False
+                    label="Video processed!", state="complete", expanded=False
                 )
 
         if accumulated.get("error"):
@@ -240,7 +239,7 @@ if process_btn and url_input:
 # ─────────────────────────────── Error display ──────────────────────────── #
 
 if st.session_state.error:
-    st.error(f"❌ {st.session_state.error}")
+    st.error(st.session_state.error)
 
 # ─────────────────────────────── Results ────────────────────────────────── #
 
@@ -271,7 +270,7 @@ if st.session_state.summary:
 
     with right_col:
         tab_summary, tab_qa, tab_transcript = st.tabs(
-            ["📋 Summary", "💬 Chat Q&A", "📜 Full Transcript"]
+            ["Summary", "Chat Q&A", "Full Transcript"]
         )
 
         # ── Summary tab ──────────────────────────────────────────────────
@@ -335,7 +334,7 @@ if st.session_state.summary:
             dl_col, _ = st.columns([1, 3])
             with dl_col:
                 st.download_button(
-                    "⬇️ Download .txt",
+                    "Download .txt",
                     data=st.session_state.transcript,
                     file_name=f"transcript_{vid_id}.txt",
                     mime="text/plain",
